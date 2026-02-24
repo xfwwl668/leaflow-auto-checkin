@@ -1,11 +1,8 @@
 name: Leaflow Auto Checkin
 
-permissions:
-  contents: write   # 允许推送 commit
-
 on:
   schedule:
-    - cron: '0 2 1 * *'   # 每月 1 号 UTC 02:00 运行
+    - cron: '0 2 * * *'
   workflow_dispatch:
 
 jobs:
@@ -13,12 +10,10 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - name: Checkout code
+    - name: Checkout repo
       uses: actions/checkout@v4
-      with:
-        persist-credentials: true
 
-    - name: Set up Python
+    - name: Setup Python
       uses: actions/setup-python@v4
       with:
         python-version: '3.11'
@@ -28,27 +23,30 @@ jobs:
         python -m pip install --upgrade pip
         pip install -r requirements.txt
 
-    - name: Install Chrome
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y google-chrome-stable
-
-    - name: Run auto checkin
+    - name: Run Leaflow Auto Checkin
       env:
         LEAFLOW_ACCOUNTS: ${{ secrets.LEAFLOW_ACCOUNTS }}
         LEAFLOW_EMAIL: ${{ secrets.LEAFLOW_EMAIL }}
         LEAFLOW_PASSWORD: ${{ secrets.LEAFLOW_PASSWORD }}
         TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
         TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         GITHUB_ACTIONS: true
       run: |
         python leaflow_checkin.py
 
-    # 🌙 超隐蔽保活（空 commit）
-    - name: Keep repository active (stealth mode)
-      if: success()
-      run: |
-        git config user.name "github-actions[bot]"
-        git config user.email "github-actions@github.com"
-        git commit --allow-empty -m "chore: monthly maintenance"
-        git push
+    - name: Keep Repository Active Without File
+      uses: actions/github-script@v7
+      with:
+        script: |
+          const repo = process.env.GITHUB_REPOSITORY;
+          const [owner, name] = repo.split("/");
+          const sha = (await github.rest.repos.getCommit({
+            owner, repo: name, ref: "main"
+          })).data.sha;
+          await github.rest.git.createCommit({
+            owner, repo: name,
+            message: `keep-alive ${new Date().toISOString().slice(0,10)}`,
+            tree: sha,
+            parents: [sha]
+          }).catch(e => console.log("保活完成或已忽略"));
