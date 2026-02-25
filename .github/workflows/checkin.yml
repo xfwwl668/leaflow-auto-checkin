@@ -1,12 +1,13 @@
 name: Leaflow Auto Checkin
 
 permissions:
-  contents: write   # 允许推送 commit
+  contents: write
 
 on:
   schedule:
-    - cron: '0 2 1 * *'   # 每月 1 号 UTC 02:00 运行
-  workflow_dispatch:
+    # 每天北京时间 10:00 运行 (UTC 02:00)
+    - cron: '0 2 * * *'  
+  workflow_dispatch: # 允许手动点击运行
 
 jobs:
   checkin:
@@ -26,7 +27,7 @@ jobs:
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install -r requirements.txt
+        if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
 
     - name: Install Chrome
       run: |
@@ -44,11 +45,19 @@ jobs:
       run: |
         python leaflow_checkin.py
 
-    # 🌙 超隐蔽保活（空 commit）
-    - name: Keep repository active (stealth mode)
-      if: success()
+    # 每月 1 号凌晨 2 点（UTC）左右执行一次“心脏跳动”保活
+    - name: Keep repository active (Heartbeat)
+      if: success() && github.event_name == 'schedule'
       run: |
-        git config user.name "github-actions[bot]"
-        git config user.email "github-actions@github.com"
-        git commit --allow-empty -m "chore: monthly maintenance"
-        git push
+        if [ "$(date +%d)" = "01" ]; then
+          echo "Monthly maintenance triggered..."
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions@github.com"
+          # 更新隐藏文件记录最后运行时间，比空 commit 更显专业
+          echo "Last active: $(date)" > .github/.keepalive
+          git add .github/.keepalive
+          git commit -m "chore: monthly repository maintenance [$(date +%Y-%m)]"
+          git push
+        else
+          echo "Daily run completed. No maintenance needed today."
+        fi
